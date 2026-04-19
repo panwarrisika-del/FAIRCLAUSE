@@ -38,9 +38,9 @@ export default function ObligationChecklist({ obligations = [] }) {
 
                         className={`flex gap-3 p-4 rounded-xl border cursor-pointer transition-all ${done
 
-                                ? 'opacity-40 border-[var(--border)] bg-white'
+                            ? 'opacity-40 border-[var(--border)] bg-white'
 
-                                : 'bg-white border-[var(--border)] hover:border-[var(--saffron)]'
+                            : 'bg-white border-[var(--border)] hover:border-[var(--saffron)]'
 
                             }`}>
 
@@ -107,4 +107,3 @@ export default function ObligationChecklist({ obligations = [] }) {
     );
 
 }
-

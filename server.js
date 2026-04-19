@@ -8,33 +8,25 @@ const app = express();
 app.use(cors({ origin: 'http://localhost:5173' }));
 app.use(express.json({ limit: '2mb' }));
 
-const MODELS = [
-    'meta-llama/llama-3.3-70b-instruct:free',
-    'mistralai/mistral-7b-instruct:free',
-    'google/gemma-3-4b-it:free',
-    'openrouter/free',
-];
-
-async function callOpenRouter(system, userMessage, maxTokens = 2000, modelIndex = 0) {
-    if (modelIndex >= MODELS.length) {
-        throw new Error('All free models are currently unavailable. Please try again in a minute.');
-    }
-
-    const model = MODELS[modelIndex];
-
+async function callMistral(system, userMessage, maxTokens = 2000, attempt = 0) {
     // Trim to stay within limits
-    if (userMessage.length > 4000) userMessage = userMessage.slice(0, 4000) + '\n[truncated]';
-    if (system && system.length > 1500) system = system.slice(0, 1500) + '\n[truncated]';
+    if (userMessage.length > 5000) userMessage = userMessage.slice(0, 5000) + '\n[truncated]';
+    if (system && system.length > 2000) system = system.slice(0, 2000) + '\n[truncated]';
 
-    console.log(`Trying model: ${model}`);
+    const models = [
+        'mistral-small-latest',
+        'open-mistral-7b',
+        'open-mixtral-8x7b',
+    ];
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const model = models[attempt] || models[0];
+    console.log(`Trying Mistral model: ${model}`);
+
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            'HTTP-Referer': 'http://localhost:5173',
-            'X-Title': 'RiskSurface India',
+            'Authorization': `Bearer ${process.env.MISTRAL_API_KEY}`,
         },
         body: JSON.stringify({
             model,
@@ -48,20 +40,18 @@ async function callOpenRouter(system, userMessage, maxTokens = 2000, modelIndex 
     });
 
     const data = await response.json();
-    console.log(`Response from ${model}:`, JSON.stringify(data).slice(0, 300));
+    console.log('Mistral response status:', response.status);
 
-    if (!response.ok || data.error) {
-        console.warn(`Model ${model} failed, trying next...`);
-        return callOpenRouter(system, userMessage, maxTokens, modelIndex + 1);
+    if (!response.ok) {
+        console.error('Mistral error:', data);
+        if (attempt < models.length - 1) {
+            await new Promise(r => setTimeout(r, 1000));
+            return callMistral(system, userMessage, maxTokens, attempt + 1);
+        }
+        throw new Error(data?.message || `Mistral API error ${response.status}`);
     }
 
-    const text = data?.choices?.[0]?.message?.content || '';
-    if (!text) {
-        console.warn(`Model ${model} returned empty, trying next...`);
-        return callOpenRouter(system, userMessage, maxTokens, modelIndex + 1);
-    }
-
-    return text;
+    return data?.choices?.[0]?.message?.content || '';
 }
 
 app.post('/api/claude', async (req, res) => {
@@ -69,7 +59,7 @@ app.post('/api/claude', async (req, res) => {
         const { system, messages, max_tokens } = req.body;
         const userMessage = messages?.[0]?.content || '';
 
-        const text = await callOpenRouter(system, userMessage, max_tokens || 2000);
+        const text = await callMistral(system, userMessage, max_tokens || 2000);
         res.json({ content: [{ type: 'text', text }] });
 
     } catch (err) {
@@ -78,4 +68,4 @@ app.post('/api/claude', async (req, res) => {
     }
 });
 
-app.listen(3001, () => console.log('✅ Backend running on http://localhost:3001'));
+app.listen(3001, () => console.log('✅ FairClause backend running on http://localhost:3001'));
