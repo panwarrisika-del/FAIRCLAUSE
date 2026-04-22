@@ -164,7 +164,7 @@ export default function UploadZone({ onTextExtracted }) {
                                         {dragging ? 'Drop it here' : 'Drop your agreement here'}
                                     </p>
                                     <p style={{ fontSize: 12, color: '#9c9790' }}>
-                                        PDF or TXT · Rental · Employment · Loan · Gig
+                                        PDF, DOCX or TXT · Rental · Employment · Loan · Gig
                                     </p>
                                 </div>
                                 <div style={{
@@ -180,7 +180,7 @@ export default function UploadZone({ onTextExtracted }) {
                         )}
                     </div>
 
-                    <input ref={inputRef} type="file" accept=".pdf,.txt" style={{ display: 'none' }}
+                    <input ref={inputRef} type="file" accept=".pdf,.txt,.docx" style={{ display: 'none' }}
                         onChange={e => e.target.files[0] && handleFile(e.target.files[0])} />
 
                     {/* Divider */}

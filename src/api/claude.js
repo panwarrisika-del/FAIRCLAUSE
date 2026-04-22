@@ -5,15 +5,15 @@ import {
   formatBenchmarksForContext,
 } from '../legalData/index.js';
 
-const CLAUDE_API = '/api/claude';
-const MODEL = 'gemini-1.5-flash';
+const API_ENDPOINT = '/api/claude';
 
-async function callClaude(systemPrompt, userMessage, maxTokens = 4000) {
-  const res = await fetch(CLAUDE_API, {
+async function callAnalyzeAPI(systemPrompt, userMessage, maxTokens = 4000) {
+  const res = await fetch(API_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
-      model: MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -33,7 +33,7 @@ async function callClaude(systemPrompt, userMessage, maxTokens = 4000) {
 // ─── 1. DETECT CONTRACT TYPE ─────────────────────────────────────────────────
 
 export async function detectContractType(text) {
-  const result = await callClaude(
+  const result = await callAnalyzeAPI(
     'You are a legal document classifier for Indian contracts. Respond ONLY with valid JSON, no markdown.',
     `Classify this Indian contract. Return JSON:
 
@@ -43,8 +43,27 @@ Contract excerpt (first 1500 chars):
 
 ${text.slice(0, 1500)}`
   );
-  try { return JSON.parse(result); }
-  catch { return { type: 'other', confidence: 0.5, description: 'General Indian contract', detectedLanguage: 'English' }; }
+
+  try {
+    const parsed = JSON.parse(result);
+
+    // Keyword fallback — if AI says "other" but text has strong contract signals, override
+    if (parsed.type === 'other') {
+      const t = text.toLowerCase();
+      if (t.includes('salary') || t.includes('designation') || t.includes('employment') || t.includes('probation') || t.includes('notice period'))
+        return { ...parsed, type: 'employment' };
+      if (t.includes('rent') || t.includes('tenant') || t.includes('landlord') || t.includes('premises') || t.includes('deposit'))
+        return { ...parsed, type: 'rental' };
+      if (t.includes('loan') || t.includes('borrower') || t.includes('repayment') || t.includes('emi') || t.includes('interest rate'))
+        return { ...parsed, type: 'loan' };
+      if (t.includes('gig') || t.includes('delivery') || t.includes('per order') || t.includes('platform fee'))
+        return { ...parsed, type: 'gig' };
+    }
+
+    return parsed;
+  } catch {
+    return { type: 'other', confidence: 0.5, description: 'General Indian contract', detectedLanguage: 'English' };
+  }
 }
 
 // ─── 2. FULL RISK ANALYSIS (RAG-grounded) ────────────────────────────────────
@@ -55,7 +74,11 @@ export async function analyzeRisks(text, contractType) {
   const lawsCtx = formatLawsForContext(laws);
   const benchCtx = formatBenchmarksForContext(benchmarks);
 
-  const result = await callClaude(
+  const contractExcerpt = text.length > 8000
+    ? text.slice(0, 8000) + '\n\n[Note: Contract truncated at 8000 characters for analysis. Full document may contain additional clauses.]'
+    : text;
+
+  const result = await callAnalyzeAPI(
     `You are an expert Indian consumer-rights and labour law analyst.
 You protect individuals — tenants, workers, gig workers, borrowers — from predatory contract clauses.
 You have access to REAL Indian laws and market benchmarks below.
@@ -124,7 +147,7 @@ overallScore: 0=extremely dangerous contract, 100=extremely safe.
 Flag ALL unusual, one-sided, or exploitative clauses. Be thorough.
 
 CONTRACT TEXT:
-${text.slice(0, 3000)}`,
+${contractExcerpt}`,
     4000
   );
 
@@ -142,7 +165,7 @@ ${text.slice(0, 3000)}`,
 // ─── 3. OBLIGATION EXTRACTOR ──────────────────────────────────────────────────
 
 export async function extractObligations(text) {
-  const result = await callClaude(
+  const result = await callAnalyzeAPI(
     'You extract concrete user obligations from Indian legal contracts. Respond ONLY with valid JSON.',
     `Extract all obligations the user is agreeing to:
 
@@ -159,7 +182,7 @@ export async function extractObligations(text) {
   ]
 }
 
-CONTRACT: ${text.slice(0, 3000)}`
+CONTRACT: ${text.slice(0, 6000)}`
   );
   try { return JSON.parse(result); }
   catch { return { obligations: [] }; }
@@ -174,7 +197,7 @@ export async function getNegotiationAdvice(clause, contractType) {
   );
   const lawsCtx = formatLawsForContext(laws);
 
-  const result = await callClaude(
+  const result = await callAnalyzeAPI(
     `You are a consumer-rights lawyer in India giving negotiation advice. Ground all advice in Indian law. Respond ONLY with valid JSON.
 
 RELEVANT INDIAN LAWS:
@@ -203,7 +226,7 @@ Why risky: ${clause.whyDangerous}`
 // ─── 5. GLOSSARY BUILDER ──────────────────────────────────────────────────────
 
 export async function buildGlossary(text) {
-  const result = await callClaude(
+  const result = await callAnalyzeAPI(
     'You define legal and financial jargon found in Indian contracts for laypeople. Respond ONLY with valid JSON.',
     `Find all legal/financial terms and define them in simple Hindi-influenced English (the way a literate Indian non-lawyer would understand):
 

@@ -1,15 +1,17 @@
 {
-  "name": "risksurface-india",
+  "name": "fairclause",
   "private": true,
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "server": "node server.js",
+    "start": "concurrently \"node server.js\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "concurrently": "^8.2.2",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",

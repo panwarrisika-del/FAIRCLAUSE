@@ -1,8 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use matching worker version to fix the version mismatch warning
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).href;
+
+export const MAX_ANALYSIS_CHARS = 8000;
 
 export async function extractTextFromPDF(file) {
     try {
@@ -32,11 +33,49 @@ export async function extractTextFromPDF(file) {
     }
 }
 
+async function extractTextFromDocx(file) {
+    try {
+        const mammoth = await import('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js').catch(() => null);
+
+        if (!mammoth) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const text = e.target.result;
+                    if (text && text.trim().length > 50) resolve(text);
+                    else reject(new Error('Could not read .docx file. Please paste the text instead.'));
+                };
+                reader.onerror = () => reject(new Error('Could not read .docx file. Please paste the text instead.'));
+                reader.readAsText(file);
+            });
+        }
+
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.default.extractRawText({ arrayBuffer });
+        if (!result.value || result.value.trim().length < 50) {
+            throw new Error('Document appears empty. Please paste the text instead.');
+        }
+        return result.value;
+    } catch (e) {
+        if (e.message.includes('paste') || e.message.includes('empty')) throw e;
+        throw new Error('Could not read .docx file. Please paste the contract text instead.');
+    }
+}
+
 export async function extractTextFromFile(file) {
     if (!file) throw new Error('No file provided.');
+
     if (file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf'))
         return extractTextFromPDF(file);
-    if (file.type.startsWith('text/') || file.name?.match(/\.(txt|doc|rtf)$/i)) {
+
+    if (
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.name?.toLowerCase().endsWith('.docx')
+    ) {
+        return extractTextFromDocx(file);
+    }
+
+    if (file.type.startsWith('text/') || file.name?.match(/\.(txt|rtf)$/i)) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = e => resolve(e.target.result);
@@ -44,7 +83,7 @@ export async function extractTextFromFile(file) {
             reader.readAsText(file);
         });
     }
-    // Try reading anything else as text anyway
+
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = e => resolve(e.target.result);
