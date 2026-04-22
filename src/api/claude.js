@@ -5,7 +5,9 @@ import {
   formatBenchmarksForContext,
 } from '../legalData/index.js';
 
-const API_ENDPOINT = '/api/claude';
+const API_ENDPOINT = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api/claude`
+  : '/api/claude';
 
 async function callAnalyzeAPI(systemPrompt, userMessage, maxTokens = 4000) {
   const res = await fetch(API_ENDPOINT, {
